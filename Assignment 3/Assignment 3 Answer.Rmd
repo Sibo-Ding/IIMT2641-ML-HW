@@ -1,0 +1,79 @@
+---
+title: "IIMT2641 Assignment 3"
+author: "Sibo Ding"
+date: "Spring 2023"
+output: word_document
+---
+
+https://rpubs.com/aashish/ClimateChangeDataAnalysis
+
+## Load the Data
+```{r}
+climate_change <- read.csv("ClimateChange.csv")
+head(climate_change) # First 6 rows
+dim(climate_change) # Number of observations and variables
+names(climate_change) # Names of variables
+```
+
+## Train-test Split
+```{r}
+climate_train <- climate_change |> subset(Year <= 2006)
+climate_test <- climate_change |> subset(Year > 2006)
+```
+
+## Build Linear Regression Model
+```{r}
+climate_reg1 <- lm(Temp ~ . - Year - Month, data = climate_train)
+summary(climate_reg1)
+
+# R^2
+summary(climate_reg1)$r.squared
+
+# Significant independent variables (with p < 0.05)
+# Note: `Intercept` is not an independent variable
+which(summary(climate_reg1)$coefficients[, 4] < 0.05)
+```
+
+The coefficients of `N2O` and `CFC.11` are negative probably because they are correlated with other variables within or beyond the model.
+
+## Correlation
+```{r}
+cor(climate_train)
+
+# `N2O` is highly correlated with
+which(cor(climate_train)["N2O", ] > 0.7)
+# Note: `Temp` is the dependent variable
+
+# `CFC.11` is highly correlated with
+which(cor(climate_train)["CFC.11", ] > 0.7)
+```
+
+## Simplify the Model
+```{r}
+climate_reg2 <- lm(Temp ~ MEI + TSI + Aerosols + N2O, 
+                   data = climate_train)
+summary(climate_reg2)
+
+# The sign of `N2O` flips.
+c("Previous" = climate_reg1$coefficients["N2O"], 
+  "Simplified" = climate_reg2$coefficients["N2O"])
+
+# The R^2 is lower in the simplified model.
+c("Previous R^2" = summary(climate_reg1)$r.squared,
+  "Simplified R^2" = summary(climate_reg2)$r.squared)
+
+# Significant independent variables (with p < 0.05)
+# Note: `Intercept` is not an independent variable
+which(summary(climate_reg2)$coefficients[, 4] < 0.05)
+```
+
+A higher proportion of independent variables is significant at 5% (4 out of 4 vs. 6 out of 8).
+
+## Out-of-sample $R^2$
+```{r}
+climate_predict <- predict(climate_reg2, newdata = climate_test)
+
+SSE <- sum((climate_test$Temp - climate_predict)^2)
+SST <- sum((climate_test$Temp - mean(climate_train$Temp))^2)
+1 - SSE/SST
+```

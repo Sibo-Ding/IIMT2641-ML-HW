@@ -1,0 +1,84 @@
+---
+title: "IIMT2641 Assignment 4"
+author: "Sibo Ding"
+date: "Spring 2023"
+output: word_document
+---
+
+## Load the Data
+```{r}
+loans <- read.csv("Loans.csv")
+head(loans) # First 6 rows
+dim(loans) # Number of observations and variables
+names(loans) # Names of variables
+
+# Change to the categorical/factor variable
+loans$NotFullyPaid <- as.factor(loans$NotFullyPaid)
+```
+
+## Train-test Split
+```{r}
+library(caTools)
+set.seed(12)
+# Randomly split the dataset with 70% in the training set
+spl <- sample.split(loans$NotFullyPaid, SplitRatio = 0.7)
+table(spl) # Number of TRUE/FALSE data
+train <- loans |> subset(spl == TRUE) # Training set
+test <- loans |> subset(spl == FALSE) # Test set
+```
+
+## Baseline Model Accuracy
+```{r}
+table(test$NotFullyPaid)["0"] / length(test$NotFullyPaid)
+```
+
+## Logistic Regression
+```{r}
+model1 <- glm(NotFullyPaid ~ ., data = train, family = binomial)
+summary(model1)
+
+# Significant independent variables (with p < 0.05)
+# Note: `Intercept` is not an independent variable
+which(summary(model1)$coefficients[, 4] < 0.05)
+```
+
+## Differences between Two Logits
+```{r}
+coef_fico <- summary(model1)$coefficients["Fico", 1]
+coef_fico * (700 - 710)
+```
+
+## Predict the Test Set
+```{r}
+predict_test1 <- predict(model1, type = "response", newdata = test)
+
+# Confusion matrix for out-of-sample prediction at threshold value 0.5
+confusion_matrix <- table(test$NotFullyPaid, predict_test1 > 0.5)
+confusion_matrix
+
+# Accuracy
+(confusion_matrix[1, 1] + confusion_matrix[2, 2]) / length(test$NotFullyPaid)
+
+# Baseline model accuracy
+table(test$NotFullyPaid)["0"] / length(test$NotFullyPaid)
+```
+The logistic regression model is slightly more accurate than the baseline model.
+
+## Logistic Regression Using `IntRate`
+```{r}
+model2 <- glm(NotFullyPaid ~ IntRate, data = train, family = binomial)
+summary(model2)
+```
+`IntRate` is significant in this model at 0.1%. It is also significant in the first model at 5%.  
+First, this difference in significance level is acceptable. Second, this difference may be because some information in the second model is explained by other independent variables in the first model.
+
+## Predict the Test Set
+```{r}
+predict_test2 <- predict(model2, type = "response", newdata = test)
+
+# Highest predicted probability
+max(predict_test2)
+
+# No. of loans would not be paid back in full
+table(predict_test2 > 0.5)["TRUE"]
+```

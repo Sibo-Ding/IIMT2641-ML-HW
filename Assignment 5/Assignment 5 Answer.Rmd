@@ -1,0 +1,177 @@
+---
+title: "IIMT2641 Assignment 5"
+author: "Sibo Ding"
+date: "Spring 2023"
+output: word_document
+---
+
+# Q1 Tree Models
+## Load the Data
+```{r}
+state <- read.csv("StateData.csv")
+head(state) # First 6 rows
+dim(state) # Number of observations and variables
+names(state) # Names of variables
+```
+
+## Train-test Split
+```{r}
+library(caTools)
+set.seed(12)
+# Randomly split the dataset with 70% in the training set
+spl <- sample.split(state$LifeExp, SplitRatio = 0.7)
+train <- state |> subset(spl == TRUE)
+test <- state |> subset(spl == FALSE)
+```
+
+## 7-variable Linear Regression Model
+```{r}
+lm1 <- lm(LifeExp ~ Population + Murder + Frost + Income + Illiteracy + Area + HighSchoolGrad, data = train)
+
+lm1_pred <- predict(lm1, newdata = test)
+# Out-of-sample R^2
+SSE <- sum((test$LifeExp - lm1_pred) ^ 2)
+SST <- sum((test$LifeExp - mean(train$LifeExp)) ^ 2)
+R2_lm1 <- 1 - SSE/SST
+R2_lm1
+```
+
+## 4-variable Linear Regression Model
+```{r}
+lm2 <- lm(LifeExp ~ Population + Murder + Frost + HighSchoolGrad, data = train)
+
+lm2_pred <- predict(lm2, newdata = test)
+# Out-of-sample R^2
+SSE <- sum((test$LifeExp - lm2_pred) ^ 2)
+SST <- sum((test$LifeExp - mean(train$LifeExp)) ^ 2)
+R2_lm2 <- 1 - SSE/SST
+R2_lm2
+```
+
+By removing independent variables, the $R^2$ on the test test is increased, meaning the overfitting problem is alleviated. The equivalent procedure in CART is pruning to have a smaller tree.
+
+## CART Model
+```{r}
+library(rpart)
+library(rpart.plot)
+
+rtree <- rpart(LifeExp ~ Population + Murder + Frost + Income + Illiteracy + Area + HighSchoolGrad, data = train, method = "anova", minbucket = 5)
+
+prp(rtree) # Plot the tree
+```
+
+Independent variables `Murder` and `Population` appear in the tree. The CART model is easier to interpret.
+
+## CART Prediction
+```{r}
+rtree_pred <- predict(rtree, newdata = test, type = "vector")
+# Out-of-sample R^2
+SSE <- sum((test$LifeExp - rtree_pred) ^ 2)
+SST <- sum((test$LifeExp - mean(train$LifeExp)) ^ 2)
+R2_rtree <- 1 - SSE/SST
+R2_rtree
+```
+
+## Random Forest
+```{r}
+library(randomForest)
+
+set.seed(1234)
+rf <- randomForest(LifeExp ~ Population + Murder + Frost + Income + Illiteracy + Area + HighSchoolGrad, data = train, ntree = 100, nodesize = 5)
+
+rf_pred <- predict(rf, newdata = test)
+# Out-of-sample R^2
+SSE <- sum((test$LifeExp - rf_pred) ^ 2)
+SST <- sum((test$LifeExp - mean(train$LifeExp)) ^ 2)
+R2_rf <- 1 - SSE/SST
+R2_rf
+```
+
+## Best Model
+```{r}
+# Out-of-sample R^2
+c("7-variable lm" = R2_lm1, "4-variable lm" = R2_lm2,
+  "Tree" = R2_rtree, "Random Forest" = R2_rf)
+```
+The 4-variable linear regression model has the highest out-of-sample $R^2$. The tree model is the easiest to interpret.
+
+# Q2 Clustering
+```{r}
+bow <- read.csv("DailyKos.csv")
+```
+
+## Hierarchical Clustering
+```{r}
+# Compute distances between points
+distances <- dist(bow, method = "euclidean")
+# Hierarchical clustering
+hbow <- hclust(distances, method = "ward.D")
+```
+
+Euclidean distance metrics is used to calculate distances.  
+Hierarchical clustering takes lot of time because in each recursion, it calculates the distance of all combinations between every two data points.
+
+### Plot the dendrogram
+```{r}
+plot(hbow)
+```
+
+### Choose the Number of Clusters
+10 clusters are recommended for different categories of articles.  
+
+```{r}
+no_clusters <- 10
+# Cut the tree into 10 clusters
+h_10clust <- cutree(hbow, no_clusters)
+# No. of observations in each cluster
+table(h_10clust)
+```
+
+### Split the Clusters and Analyze Each Cluster
+```{r}
+# Split the dataset into a dataset for each cluster
+# Find the six most frequent words in each cluster
+no_clusters <- 10
+for (i in 1:no_clusters){
+  bow |>
+    subset(h_10clust == i) |>  # Filter
+    colMeans() |>  # Take the average of each column
+    sort(decreasing = TRUE) |>
+    head() |> 
+    print.data.frame()
+  cat("\n")  # Add a line for easier reading
+}
+```
+
+There is a cluster that is mostly about the Iraq war. There are several clusters that are mostly about the democratic party.
+
+## K-means Clustering
+```{r}
+no_clusters <- 10
+set.seed(23)
+kbow <- kmeans(bow, no_clusters)
+k_10clust <- kbow$cluster
+# No. of observations in each cluster
+table(k_10clust)
+```
+
+The number of observations in each cluster is different from hierarchical clustering, because the clustering algorithms are different.
+
+### Split the Clusters and Analyze Each Cluster
+```{r}
+# Split the dataset into a dataset for each cluster
+# Find the six most frequent words in each cluster
+no_clusters <- 10
+for (i in 1:no_clusters){
+  bow |>
+    subset(k_10clust == i) |>
+    colMeans() |>
+    sort(decreasing = TRUE) |>
+    head() |> 
+    print.data.frame()
+  cat("\n")
+}
+```
+
+Overall, these two groups of clusters have very similar keywords, like "bush", "kerry", "republican", "november", "iraq", etc.  
+2 clusters starting with "november" among 10 clusters are identical with hierarchical clustering.
